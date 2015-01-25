@@ -116,6 +116,8 @@
     "ServerGroup" : {
       "Type" : "AWS::AutoScaling::AutoScalingGroup",
       "Properties" : {
+        "HealthCheckGracePeriod": 300,
+        "HealthCheckType": "ELB",
         "AvailabilityZones" : {
           "Fn::If" : [
             "UseAllAvailabilityZones",
@@ -124,6 +126,10 @@
           ]
         },
         "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+        "LoadBalancerNames": [
+            { "Ref" : "MesosElb" },
+            { "Ref" : "MarathonElb" }
+        ],
         "MinSize" : { "Ref" : "ClusterSize" },
         "MaxSize" : { "Ref" : "ClusterSize" },
         "DesiredCapacity" : { "Ref" : "ClusterSize" },
@@ -300,7 +306,51 @@
         "FromPort": "0",
         "ToPort": "65535",
         "SourceSecurityGroupId": { "Ref": "SecurityGroup" }
+       }
+    },
+
+    "MesosElb" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "CrossZone": "true",
+        "Scheme": "internal",
+        "SecurityGroups": [{ "Ref": "SecurityGroup" }, { "Ref": "AdminSecurityGroup" }],
+        "Subnets": { "Ref": "Subnets" },
+        "Listeners" : [ {
+          "LoadBalancerPort" : "80",
+          "InstancePort" : "5050",
+          "Protocol" : "HTTP"
+        } ],
+        "HealthCheck" : {
+          "Target" : "HTTP:5050/",
+          "HealthyThreshold" : "3",
+          "UnhealthyThreshold" : "5",
+          "Interval" : "30",
+          "Timeout" : "5"
         }
+      }
+    },
+
+    "MarathonElb" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "CrossZone": "true",
+        "Scheme": "internal",
+        "SecurityGroups": [{ "Ref": "SecurityGroup" }, { "Ref": "AdminSecurityGroup" }],
+        "Subnets": { "Ref": "Subnets" },
+        "Listeners" : [ {
+          "LoadBalancerPort" : "80",
+          "InstancePort" : "8080",
+          "Protocol" : "HTTP"
+        } ],
+        "HealthCheck" : {
+          "Target" : "HTTP:8080/status",
+          "HealthyThreshold" : "3",
+          "UnhealthyThreshold" : "5",
+          "Interval" : "30",
+          "Timeout" : "5"
+        }
+      }
     },
 
     "WaitHandle" : {
@@ -311,6 +361,16 @@
   "Outputs" : {
     "MesosMasterSecurityGroup" : {
       "Value" : { "Ref" : "SecurityGroup" }
+    },
+    "MesosMasterUrl" : {
+        "Value" : { "Fn::Join" : [ "", [
+            "http://", { "Fn::GetAtt" : [ "MesosElb", "DNSName" ]}
+        ]]}
+    },
+    "MarathonMasterUrl" : {
+        "Value" : { "Fn::Join" : [ "", [
+            "http://", { "Fn::GetAtt" : [ "MarathonElb", "DNSName" ]}
+        ]]}
     }
   }
 }
